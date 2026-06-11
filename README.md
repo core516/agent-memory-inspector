@@ -1,5 +1,7 @@
 <div align="center">
 
+**English** · [简体中文](README.zh-CN.md)
+
 # 🧠 Agent Memory Inspector
 
 ### See, edit, and prune the memory your AI coding agents already wrote to disk.
