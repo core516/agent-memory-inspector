@@ -1,0 +1,33 @@
+{
+  "name": "agent-memory-inspector",
+  "version": "0.1.0",
+  "description": "Local-first GUI to see, edit, and diff the memory your AI coding agents already wrote to disk. Zero migration, no telemetry.",
+  "type": "module",
+  "bin": {
+    "agent-memory-inspector": "server/index.js"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "build": "cd web && npm install && npm run build",
+    "dev:server": "node --watch server/index.js",
+    "dev:web": "cd web && npm run dev"
+  },
+  "files": [
+    "server",
+    "web/dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "memory",
+    "claude-code",
+    "context",
+    "local-first",
+    "llm",
+    "mcp"
+  ],
+  "license": "MIT"
+}
