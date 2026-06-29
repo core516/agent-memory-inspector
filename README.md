@@ -14,7 +14,7 @@ npx agent-memory-inspector
 
 <!-- TODO before launch: replace with a real GIF of the UI (the single most important README asset).
      Record: launch → list of real memories → click one → edit → save. Keep it < 8s. -->
-![Agent Memory Inspector UI](docs/hero.gif)
+![Agent Memory Inspector UI](README.jpg)
 
 <sub>Your coding agent remembers things about you and your projects. This shows you exactly what — and lets you fix it.</sub>
 

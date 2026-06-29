@@ -14,7 +14,7 @@ npx agent-memory-inspector
 
 <!-- 发布前 TODO：替换为真实的 UI 演示 GIF（这是 README 最重要的素材）。
      录制流程：启动 → 列出真实记忆 → 点击某条 → 编辑 → 保存。控制在 8 秒以内。 -->
-![Agent Memory Inspector UI](docs/hero.gif)
+![Agent Memory Inspector UI](README.jpg)
 
 <sub>你的编程助手记住了关于你和你项目的种种信息。本工具让你看清这些信息究竟是什么——并能随手修正。</sub>
 
