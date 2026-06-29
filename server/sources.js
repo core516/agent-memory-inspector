@@ -153,6 +153,56 @@ export function pathFor(id) {
   return Buffer.from(id, 'base64url').toString('utf8');
 }
 
+/** Find the source kind that claims this path, if any. */
+function kindForPath(path) {
+  return KINDS.find((k) => k.match(path)) || null;
+}
+
+/**
+ * Build a single memory record from a file path. Returns null if the path
+ * isn't a known memory file or can't be stat'd. Used both by the full scan
+ * and to refresh one row after an in-place edit.
+ */
+export async function recordForPath(path, kind = kindForPath(path)) {
+  if (!kind) return null;
+  let st;
+  try {
+    st = await stat(path);
+  } catch {
+    return null;
+  }
+  let meta = {};
+  let links = [];
+  let preview = '';
+  // Only parse small files eagerly; the detail view reads full content.
+  if (st.size < 64 * 1024) {
+    try {
+      const text = await readFile(path, 'utf8');
+      const parsed = parseFrontmatter(text);
+      meta = parsed.meta;
+      links = extractLinks(parsed.body);
+      preview = parsed.body.slice(0, 200);
+    } catch {
+      /* unreadable — keep the stub */
+    }
+  }
+  return {
+    id: idFor(path),
+    kind: kind.id,
+    kindLabel: kind.label,
+    path,
+    name: meta.name || basename(path).replace(/\.(md|mdc)$/, ''),
+    description: meta.description || preview.split('\n')[0] || '',
+    type: meta.metadata?.type || meta.type || kind.id,
+    product: productFor(kind.id),          // L1 — by product
+    scope: scopeFor(path, meta, kind.id),  // L2 — by coverage scope
+    links,
+    size: st.size,
+    mtime: st.mtimeMs,
+    isIndex: basename(path).toLowerCase() === 'memory.md',
+  };
+}
+
 /**
  * Scan all known sources and return a flat list of memory records.
  * Each record is light — body is loaded lazily by the detail endpoint.
@@ -168,42 +218,8 @@ export async function scanMemories() {
       for (const path of files) {
         if (!kind.match(path) || seen.has(path)) continue;
         seen.add(path);
-        let st;
-        try {
-          st = await stat(path);
-        } catch {
-          continue;
-        }
-        let meta = {};
-        let links = [];
-        let preview = '';
-        // Only parse small files eagerly; the detail view reads full content.
-        if (st.size < 64 * 1024) {
-          try {
-            const text = await readFile(path, 'utf8');
-            const parsed = parseFrontmatter(text);
-            meta = parsed.meta;
-            links = extractLinks(parsed.body);
-            preview = parsed.body.slice(0, 200);
-          } catch {
-            /* unreadable — keep the stub */
-          }
-        }
-        records.push({
-          id: idFor(path),
-          kind: kind.id,
-          kindLabel: kind.label,
-          path,
-          name: meta.name || basename(path).replace(/\.(md|mdc)$/, ''),
-          description: meta.description || preview.split('\n')[0] || '',
-          type: meta.metadata?.type || meta.type || kind.id,
-          product: productFor(kind.id),          // L1 — by product
-          scope: scopeFor(path, meta, kind.id),  // L2 — by coverage scope
-          links,
-          size: st.size,
-          mtime: st.mtimeMs,
-          isIndex: basename(path).toLowerCase() === 'memory.md',
-        });
+        const record = await recordForPath(path, kind);
+        if (record) records.push(record);
       }
     }
   }

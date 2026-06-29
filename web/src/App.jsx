@@ -38,14 +38,15 @@ const typeLabel = (t, tr) => {
 };
 
 function useMemories() {
-  const [data, setData] = useState({ memories: [], stats: null });
+  const [data, setData] = useState({ memories: [], stats: null, lastScan: null });
   const [loading, setLoading] = useState(true);
+  const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
 
-  // Fetch with bounded retry — on first load the browser tab can race ahead
-  // of the local server (or the server may be restarting). Never leave the
-  // user staring at an empty list because of a single transient failure.
-  const reload = (attempt = 0) => {
+  // Load cached scan results — no filesystem scan happens here, so opening
+  // the page is instant. Bounded retry covers the brief window where the tab
+  // races ahead of the local server (or it's restarting).
+  const load = (attempt = 0) => {
     setLoading(true);
     fetch(`${API}/api/memories`, { cache: 'no-store' })
       .then((r) => {
@@ -55,19 +56,34 @@ function useMemories() {
       .then((d) => { setData(d); setError(null); setLoading(false); })
       .catch((e) => {
         if (attempt < 5) {
-          setTimeout(() => reload(attempt + 1), 400 * (attempt + 1));
+          setTimeout(() => load(attempt + 1), 400 * (attempt + 1));
         } else {
           setError(String(e.message || e));
           setLoading(false);
         }
       });
   };
-  useEffect(() => reload(0), []);
-  return { ...data, loading, error, reload: () => reload(0) };
+
+  // Explicit rescan — the only action that walks the filesystem. Persists to
+  // the cache server-side and returns the fresh list plus the new scan time.
+  const rescan = () => {
+    setScanning(true);
+    fetch(`${API}/api/scan`, { method: 'POST' })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((d) => { setData(d); setError(null); })
+      .catch((e) => setError(String(e.message || e)))
+      .finally(() => setScanning(false));
+  };
+
+  useEffect(() => load(0), []);
+  return { ...data, loading, scanning, error, reload: () => load(0), rescan };
 }
 
 export default function App() {
-  const { memories, stats, loading, error, reload } = useMemories();
+  const { memories, stats, lastScan, loading, scanning, error, reload, rescan } = useMemories();
   const [query, setQuery] = useState('');
   const [typeFilters, setTypeFilters] = useState([]); // multi-select
   const [productFilter, setProductFilter] = useState(null); // L1
@@ -93,7 +109,7 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col">
-      <Header stats={stats} onReload={reload} loading={loading} />
+      <Header stats={stats} onRescan={rescan} scanning={scanning} />
       <div className="flex-1 flex min-h-0">
         <Sidebar
           memories={filtered}
@@ -111,7 +127,10 @@ export default function App() {
           selectedId={selectedId}
           onSelect={setSelectedId}
           loading={loading}
+          scanning={scanning}
           error={error}
+          lastScan={lastScan}
+          onRescan={rescan}
         />
         <Detail id={selectedId} onSaved={reload} onDeleted={() => { setSelectedId(null); reload(); }} />
       </div>
@@ -119,7 +138,7 @@ export default function App() {
   );
 }
 
-function Header({ stats, onReload, loading }) {
+function Header({ stats, onRescan, scanning }) {
   const { t, toggle } = useI18n();
   return (
     <header className="flex items-center gap-3 px-5 h-16 divider-grad bg-white/70 backdrop-blur-sm">
@@ -137,12 +156,12 @@ function Header({ stats, onReload, loading }) {
         </div>
       </div>
       <button
-        onClick={onReload}
-        disabled={loading}
+        onClick={onRescan}
+        disabled={scanning}
         className="btn btn-blue text-sm px-4 py-2 ml-3 font-medium flex items-center gap-1.5"
       >
-        <span className={loading ? 'inline-block animate-spin' : ''}>🔄</span>
-        {loading ? t('header.scanning') : t('header.rescan')}
+        <span className={scanning ? 'inline-block animate-spin' : ''}>🔄</span>
+        {scanning ? t('header.scanning') : t('header.rescan')}
       </button>
       <div className="flex-1" />
       {stats && (
@@ -174,7 +193,7 @@ function Stat({ n, label }) {
   );
 }
 
-function Sidebar({ memories, total, query, setQuery, typeFilter, setTypeFilters, productFilter, setProductFilter, scopeFilter, setScopeFilter, clearFilters, stats, selectedId, onSelect, loading, error }) {
+function Sidebar({ memories, total, query, setQuery, typeFilter, setTypeFilters, productFilter, setProductFilter, scopeFilter, setScopeFilter, clearFilters, stats, selectedId, onSelect, loading, scanning, error, lastScan, onRescan }) {
   const { t } = useI18n();
   const sorted = (obj) => Object.entries(obj || {}).sort((a, b) => b[1] - a[1]);
   const types = stats ? sorted(stats.byType) : [];
@@ -260,12 +279,21 @@ function Sidebar({ memories, total, query, setQuery, typeFilter, setTypeFilters,
           </ChipRow>
         )}
       </div>
+      <LastScanBar lastScan={lastScan} scanning={scanning} />
       <div className="flex-1 overflow-y-auto px-2.5 py-2">
         {error && <div className="p-4 text-sm text-coral">{t('detail.error', { msg: error })}</div>}
-        {loading && memories.length === 0 && !error && (
+        {(scanning || loading) && memories.length === 0 && !error && (
           <div className="p-6 text-sm text-muted text-center">{t('sidebar.scanning')}</div>
         )}
-        {!error && !loading && memories.length === 0 && (
+        {!error && !scanning && !loading && memories.length === 0 && lastScan == null && (
+          <div className="p-6 text-sm text-muted text-center space-y-3">
+            <div>{t('sidebar.neverScanned')}</div>
+            <button onClick={onRescan} className="btn btn-blue text-xs px-4 py-2 font-medium">
+              {t('header.rescan')}
+            </button>
+          </div>
+        )}
+        {!error && !scanning && !loading && memories.length === 0 && lastScan != null && (
           <div className="p-6 text-sm text-muted text-center">
             {t('sidebar.empty')}
           </div>
@@ -275,6 +303,34 @@ function Sidebar({ memories, total, query, setQuery, typeFilter, setTypeFilters,
         ))}
       </div>
     </aside>
+  );
+}
+
+// Formats an epoch-ms scan time as a localized, human date-time string.
+function formatScanTime(ms, lang) {
+  try {
+    return new Date(ms).toLocaleString(lang === 'zh' ? 'zh-CN' : undefined, {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch {
+    return String(ms);
+  }
+}
+
+// The "last scan" strip pinned at the top of the memory list.
+function LastScanBar({ lastScan, scanning }) {
+  const { t, lang } = useI18n();
+  const text = scanning
+    ? t('sidebar.scanning')
+    : lastScan != null
+      ? t('sidebar.lastScan', { time: formatScanTime(lastScan, lang) })
+      : t('sidebar.neverScannedShort');
+  return (
+    <div className="flex items-center gap-1.5 px-3.5 py-2 border-y border-[#EFE4FB] bg-white/50 text-[11px] text-muted">
+      <span className={scanning ? 'inline-block animate-spin' : ''}>🕒</span>
+      <span className="truncate">{text}</span>
+    </div>
   );
 }
 
@@ -434,7 +490,7 @@ function Detail({ id, onSaved, onDeleted }) {
   }, [id]);
 
   if (!id) return <Empty />;
-  if (!mem) return <div className="flex-1 grid place-items-center text-muted">{t('detail.loading')}</div>;
+  if (!mem) return <div className="flex-1 grid place-items-center text-muted bg-cream">{t('detail.loading')}</div>;
 
   const save = async () => {
     setSaving(true);
@@ -476,7 +532,7 @@ function Detail({ id, onSaved, onDeleted }) {
   };
 
   return (
-    <main className="flex-1 flex flex-col min-h-0">
+    <main className="flex-1 flex flex-col min-h-0 bg-cream">
       <div className="flex items-center gap-3 px-5 h-14 divider-grad bg-white/70 backdrop-blur-sm">
         <span className={`w-2.5 h-2.5 rounded-full ${styleFor(mem.meta?.metadata?.type || mem.meta?.type).dot}`} />
         <h2 className="font-display text-ink truncate">{mem.meta?.name || mem.relPath}</h2>
@@ -596,7 +652,7 @@ function linkify(text) {
 function Empty() {
   const { t } = useI18n();
   return (
-    <main className="flex-1 grid place-items-center text-center px-8">
+    <main className="flex-1 grid place-items-center text-center px-8 bg-cream">
       <div className="max-w-md pop">
         <div className="text-7xl mb-4">🧠</div>
         <h2 className="font-display text-xl text-ink">{t('empty.title')}</h2>

@@ -10,7 +10,8 @@ import { readFile, writeFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, extname } from 'node:path';
-import { scanMemories, loadMemory, pathFor } from './sources.js';
+import { scanMemories, loadMemory, pathFor, recordForPath } from './sources.js';
+import { saveScan, readScan, upsertMemory, removeMemory, pushHistory, archiveMemory } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = join(__dirname, '..', 'web', 'dist');
@@ -47,11 +48,21 @@ async function readBody(req) {
 }
 
 const routes = {
-  // List every memory found across all known agent sources.
+  // List memories from the local cache — no filesystem scan on page load.
+  // Returns the last scan time so the UI can show how fresh the data is.
   'GET /api/memories': async (_req, res) => {
-    const memories = await scanMemories();
+    const { memories, lastScan } = await readScan();
     const stats = summarize(memories);
-    json(res, 200, { memories, stats });
+    json(res, 200, { memories, stats, lastScan });
+  },
+
+  // Explicit rescan: walk the filesystem, persist the result to the cache,
+  // and stamp the scan time. This is the only path that touches disk broadly.
+  'POST /api/scan': async (_req, res) => {
+    const memories = await scanMemories();
+    const lastScan = await saveScan(memories);
+    const stats = summarize(memories);
+    json(res, 200, { memories, stats, lastScan });
   },
 
   // Full content of one memory (frontmatter + body + raw).
@@ -66,7 +77,8 @@ const routes = {
     }
   },
 
-  // Save an edited memory back to its original file (with a .bak safety copy).
+  // Save an edited memory back to its original file. The previous content is
+  // kept as a rolling edit-history snapshot (newest 3 retained).
   'POST /api/memory': async (req, res) => {
     const { id, content } = await readBody(req);
     if (!id || typeof content !== 'string') {
@@ -76,33 +88,38 @@ const routes = {
     if (!existsSync(path)) return json(res, 404, { error: 'file not found' });
     try {
       const prev = await readFile(path, 'utf8');
-      await writeFile(`${path}.bak`, prev, 'utf8'); // reversible by design
+      await pushHistory(id, prev);                    // keep last 3 pre-edit versions
       await writeFile(path, content, 'utf8');
-      json(res, 200, { ok: true, backup: `${path}.bak` });
+      await upsertMemory(await recordForPath(path));  // keep the cache row in sync
+      json(res, 200, { ok: true });
     } catch (e) {
       json(res, 500, { error: String(e.message || e) });
     }
   },
 
-  // Delete a memory — backs up to a .bak first, so it stays reversible.
+  // Delete a memory — its full content + metadata is archived first, so the
+  // data is recoverable and the active list stays clean.
   'DELETE /api/memory': async (req, res, url) => {
     const id = url.searchParams.get('id');
     if (!id) return json(res, 400, { error: 'missing id' });
     const path = pathFor(id);
     if (!existsSync(path)) return json(res, 404, { error: 'file not found' });
     try {
-      const prev = await readFile(path, 'utf8');
-      await writeFile(`${path}.bak`, prev, 'utf8'); // reversible by design
+      const content = await readFile(path, 'utf8');
+      const record = await recordForPath(path);       // metadata snapshot before removal
+      await archiveMemory(record || { id, path }, content);
       await rm(path);
-      json(res, 200, { ok: true, backup: `${path}.bak` });
+      await removeMemory(id);                          // drop from cache + clear its history
+      json(res, 200, { ok: true, archived: true });
     } catch (e) {
       json(res, 500, { error: String(e.message || e) });
     }
   },
 
   // Link graph: nodes = memories, edges = [[wikilinks]] between them.
+  // Built from the cache so it reflects the last scan without re-walking disk.
   'GET /api/graph': async (_req, res) => {
-    const memories = await scanMemories();
+    const { memories } = await readScan();
     const byName = new Map(memories.map((m) => [m.name, m.id]));
     const nodes = memories.map((m) => ({
       id: m.id, name: m.name, type: m.type, kind: m.kind,
