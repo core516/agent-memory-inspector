@@ -2,15 +2,121 @@
 @tailwind components;
 @tailwind utilities;
 
-html { color-scheme: dark; }
+html { color-scheme: light; }
 
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 6px; }
-::-webkit-scrollbar-thumb:hover { background: #334155; }
-
-/* Subtle entrance for list items / panels. */
-@keyframes fade-up {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+/* Cream page with a few soft, blurred candy dots scattered behind content. */
+body {
+  background-color: #FFF8EC;
+  background-image:
+    radial-gradient(circle, rgba(155,126,222,.12) 0, rgba(155,126,222,.12) 9px, transparent 10px),
+    radial-gradient(circle, rgba(111,195,255,.12) 0, rgba(111,195,255,.12) 7px, transparent 8px),
+    radial-gradient(circle, rgba(111,224,200,.12) 0, rgba(111,224,200,.12) 8px, transparent 9px),
+    radial-gradient(circle, rgba(255,212,94,.12) 0, rgba(255,212,94,.12) 6px, transparent 7px);
+  background-position: 6% 14%, 88% 20%, 78% 82%, 18% 88%;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
-.fade-up { animation: fade-up 0.18s ease-out both; }
+
+/* Soft pill scrollbars in the lilac family. */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(155,126,222,.30);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(155,126,222,.50); background-clip: padding-box; }
+
+@layer components {
+  /* ---- Gradient stroke (double-background, no jagged corners) ---- */
+  .grad-border {
+    border: 2px solid transparent;
+    border-radius: 16px;
+    background:
+      linear-gradient(#fff, #fff) padding-box,
+      linear-gradient(135deg, #E7DAF7, #D5EFEA) border-box;
+    transition: background .2s ease, box-shadow .2s ease, transform .2s ease;
+  }
+  /* Hover brightens the stroke instead of dropping a hard shadow. */
+  .grad-border-hover:hover {
+    background:
+      linear-gradient(#fff, #fff) padding-box,
+      linear-gradient(135deg, #C9B3F0, #A9E6D9) border-box;
+  }
+  /* Selected / active highlight — purple → sky stroke + emphasis shadow. */
+  .grad-border-sel {
+    border: 2px solid transparent;
+    border-radius: 16px;
+    background:
+      linear-gradient(#fff, #fff) padding-box,
+      linear-gradient(135deg, #9B7EDE, #6FC3FF) border-box;
+    box-shadow: 0 10px 22px rgba(58,45,74,.14);
+  }
+
+  /* Straight gradient divider (top bar / panel edges). */
+  .divider-grad {
+    border-bottom: 3px solid transparent;
+    border-image: linear-gradient(90deg, #9B7EDE, #6FC3FF, #6FE0C8, #FFD45E) 1;
+  }
+
+  /* ---- Buttons: hover float, active settle (springy) ---- */
+  .btn {
+    border-radius: 9999px;
+    transition: transform .2s cubic-bezier(.34,1.56,.64,1), box-shadow .2s ease, background .2s ease;
+    box-shadow: 0 6px 16px rgba(58,45,74,.10);
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(58,45,74,.14); }
+  .btn:active { transform: translateY(0); box-shadow: 0 6px 16px rgba(58,45,74,.10); }
+  .btn:disabled { opacity: .5; transform: none; box-shadow: 0 6px 16px rgba(58,45,74,.10); }
+
+  /* Ghost button — white fill, lilac gradient stroke. */
+  .btn-ghost {
+    border: 2px solid transparent;
+    color: #7B5FC9;
+    background:
+      linear-gradient(#fff, #fff) padding-box,
+      linear-gradient(135deg, #E7DAF7, #D5EFEA) border-box;
+  }
+  .btn-ghost:hover {
+    background:
+      linear-gradient(#fff, #fff) padding-box,
+      linear-gradient(135deg, #C9B3F0, #A9E6D9) border-box;
+  }
+  /* Primary button — blue → purple solid, translucent white edge. */
+  .btn-blue {
+    color: #fff;
+    border: 2px solid rgba(255,255,255,.6);
+    background: linear-gradient(135deg, #6FC3FF, #9B7EDE);
+  }
+  /* Accent button — sun → orange solid. */
+  .btn-accent {
+    color: #6b4310;
+    border: 2px solid rgba(255,255,255,.6);
+    background: linear-gradient(135deg, #FFD45E, #FFA45B);
+  }
+}
+
+/* Card lift: float up + a playful micro-rotation, soft shadow deepens. */
+.card { transition: transform .22s cubic-bezier(.34,1.56,.64,1), box-shadow .22s ease, background .2s ease; }
+.card:hover { transform: translateY(-3px) rotate(-.4deg); box-shadow: 0 10px 22px rgba(58,45,74,.14); }
+
+/* Springy entrance for list items / panels. */
+@keyframes pop {
+  0%   { opacity: 0; transform: translateY(8px) scale(.985); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.pop { animation: pop .28s cubic-bezier(.34,1.56,.64,1) both; }
+
+/* Gentle fade-in for swapped content. */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.fade-in { animation: fade-in .22s ease-out both; }
+
+/* Toast / saved-pill bounce-in. */
+@keyframes toast-in {
+  0%   { opacity: 0; transform: translateY(-6px) scale(.9); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.toast { animation: toast-in .3s cubic-bezier(.34,1.56,.64,1) both; }

@@ -1,17 +1,36 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from './i18n.jsx';
 
 const API = '';
 
 // Color mapping per memory type. The human label comes from i18n (`type.<id>`).
 const TYPE_STYLE = {
-  user:     { dot: 'bg-emerald-400', text: 'text-emerald-300' },
-  feedback: { dot: 'bg-amber-400',   text: 'text-amber-300' },
-  project:  { dot: 'bg-sky-400',     text: 'text-sky-300' },
-  reference:{ dot: 'bg-violet-400',  text: 'text-violet-300' },
+  user:     { dot: 'bg-mint',   text: 'text-[#2f9c84]' },
+  feedback: { dot: 'bg-orange', text: 'text-[#d97a2e]' },
+  project:  { dot: 'bg-sky',    text: 'text-[#2f86c9]' },
+  reference:{ dot: 'bg-purple', text: 'text-purpleDeep' },
 };
-const FALLBACK_STYLE = { dot: 'bg-slate-500', text: 'text-slate-400' };
+const FALLBACK_STYLE = { dot: 'bg-[#C9BFD8]', text: 'text-muted' };
 const styleFor = (t) => TYPE_STYLE[t] || FALLBACK_STYLE;
+
+// L1 — color per product. L2 — color per coverage scope.
+const PRODUCT_STYLE = {
+  'claude-code': { dot: 'bg-purple' },
+  codex:         { dot: 'bg-sky' },
+  cursor:        { dot: 'bg-orange' },
+};
+const SCOPE_STYLE = {
+  project: { dot: 'bg-sky' },
+  user:    { dot: 'bg-mint' },
+  global:  { dot: 'bg-purple' },
+};
+const productDot = (p) => (PRODUCT_STYLE[p] || FALLBACK_STYLE).dot;
+const scopeDot = (s) => (SCOPE_STYLE[s] || FALLBACK_STYLE).dot;
+// Localized label with raw-id fallback for unknown values.
+const labelOr = (prefix, id, tr) => {
+  const s = tr(`${prefix}.${id}`);
+  return s === `${prefix}.${id}` ? id : s;
+};
 // Localized label for a type id; falls back to the raw id for unknown types.
 const typeLabel = (t, tr) => {
   const known = ['user', 'feedback', 'project', 'reference'];
@@ -50,13 +69,17 @@ function useMemories() {
 export default function App() {
   const { memories, stats, loading, error, reload } = useMemories();
   const [query, setQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState(null);
+  const [typeFilters, setTypeFilters] = useState([]); // multi-select
+  const [productFilter, setProductFilter] = useState(null); // L1
+  const [scopeFilter, setScopeFilter] = useState(null);     // L2
   const [selectedId, setSelectedId] = useState(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return memories.filter((m) => {
-      if (typeFilter && m.type !== typeFilter) return false;
+      if (typeFilters.length && !typeFilters.includes(m.type)) return false;
+      if (productFilter && m.product !== productFilter) return false;
+      if (scopeFilter && m.scope !== scopeFilter) return false;
       if (!q) return true;
       return (
         m.name.toLowerCase().includes(q) ||
@@ -64,7 +87,9 @@ export default function App() {
         m.path.toLowerCase().includes(q)
       );
     });
-  }, [memories, query, typeFilter]);
+  }, [memories, query, typeFilters, productFilter, scopeFilter]);
+
+  const clearFilters = () => { setTypeFilters([]); setProductFilter(null); setScopeFilter(null); };
 
   return (
     <div className="h-screen flex flex-col">
@@ -75,15 +100,20 @@ export default function App() {
           total={memories.length}
           query={query}
           setQuery={setQuery}
-          typeFilter={typeFilter}
-          setTypeFilter={setTypeFilter}
+          typeFilter={typeFilters}
+          setTypeFilters={setTypeFilters}
+          productFilter={productFilter}
+          setProductFilter={setProductFilter}
+          scopeFilter={scopeFilter}
+          setScopeFilter={setScopeFilter}
+          clearFilters={clearFilters}
           stats={stats}
           selectedId={selectedId}
           onSelect={setSelectedId}
           loading={loading}
           error={error}
         />
-        <Detail id={selectedId} onSaved={reload} />
+        <Detail id={selectedId} onSaved={reload} onDeleted={() => { setSelectedId(null); reload(); }} />
       </div>
     </div>
   );
@@ -92,34 +122,44 @@ export default function App() {
 function Header({ stats, onReload, loading }) {
   const { t, toggle } = useI18n();
   return (
-    <header className="flex items-center gap-3 px-5 h-14 border-b border-edge bg-panel/80 backdrop-blur">
-      <span className="text-xl">🧠</span>
+    <header className="flex items-center gap-3 px-5 h-16 divider-grad bg-white/70 backdrop-blur-sm">
+      {/* Playful candy dots in place of window controls. */}
+      <div className="flex items-center gap-2 pr-1">
+        <span className="w-3 h-3 rounded-full bg-coral" />
+        <span className="w-3 h-3 rounded-full bg-sun" />
+        <span className="w-3 h-3 rounded-full bg-mint" />
+      </div>
+      <span className="text-2xl ml-1">🧠</span>
       <div className="leading-tight">
-        <div className="font-semibold tracking-tight">{t('app.title')}</div>
-        <div className="text-[11px] text-slate-500 -mt-0.5">
+        <div className="font-display text-lg text-ink">{t('app.title')}</div>
+        <div className="text-[11px] text-muted -mt-0.5">
           {t('app.subtitle')}
         </div>
       </div>
+      <button
+        onClick={onReload}
+        disabled={loading}
+        className="btn btn-blue text-sm px-4 py-2 ml-3 font-medium flex items-center gap-1.5"
+      >
+        <span className={loading ? 'inline-block animate-spin' : ''}>🔄</span>
+        {loading ? t('header.scanning') : t('header.rescan')}
+      </button>
       <div className="flex-1" />
       {stats && (
-        <div className="hidden md:flex items-center gap-4 text-xs text-slate-400">
+        <div className="hidden md:flex items-center gap-1 text-xs text-muted mr-1">
           <Stat n={stats.total} label={t('stats.memories')} />
+          <span className="w-px h-7 bg-[#E7DAF7]" />
           <Stat n={stats.linked} label={t('stats.linked')} />
+          <span className="w-px h-7 bg-[#E7DAF7]" />
           <Stat n={Object.keys(stats.byKind || {}).length} label={t('stats.sources')} />
         </div>
       )}
       <button
         onClick={toggle}
-        className="ml-2 text-xs px-3 py-1.5 rounded-md border border-edge hover:bg-edge transition-colors"
+        className="btn btn-ghost ml-1 text-xs px-3 py-1.5"
         title="Switch language / 切换语言"
       >
         🌐 {t('lang.switch')}
-      </button>
-      <button
-        onClick={onReload}
-        className="text-xs px-3 py-1.5 rounded-md border border-edge hover:bg-edge transition-colors"
-      >
-        {loading ? t('header.scanning') : t('header.rescan')}
       </button>
     </header>
   );
@@ -127,45 +167,106 @@ function Header({ stats, onReload, loading }) {
 
 function Stat({ n, label }) {
   return (
-    <div className="text-center">
-      <div className="text-slate-100 font-semibold tabular-nums">{n}</div>
-      <div className="text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
+    <div className="text-center px-2">
+      <div className="text-ink font-display tabular-nums">{n}</div>
+      <div className="text-[10px] uppercase tracking-wide text-muted">{label}</div>
     </div>
   );
 }
 
-function Sidebar({ memories, total, query, setQuery, typeFilter, setTypeFilter, stats, selectedId, onSelect, loading, error }) {
+function Sidebar({ memories, total, query, setQuery, typeFilter, setTypeFilters, productFilter, setProductFilter, scopeFilter, setScopeFilter, clearFilters, stats, selectedId, onSelect, loading, error }) {
   const { t } = useI18n();
-  const types = stats ? Object.entries(stats.byType || {}).sort((a, b) => b[1] - a[1]) : [];
+  const sorted = (obj) => Object.entries(obj || {}).sort((a, b) => b[1] - a[1]);
+  const types = stats ? sorted(stats.byType) : [];
+  const products = stats ? sorted(stats.byProduct) : [];
+  const scopes = stats ? sorted(stats.byScope) : [];
+  const noFilter = typeFilter.length === 0 && !productFilter && !scopeFilter;
   return (
-    <aside className="w-[22rem] shrink-0 border-r border-edge bg-panel/40 flex flex-col min-h-0">
-      <div className="p-3 border-b border-edge space-y-2">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('sidebar.search')}
-          className="w-full bg-ink border border-edge rounded-md px-3 py-2 text-sm outline-none focus:border-sky-500/60 transition-colors"
-        />
-        <div className="flex flex-wrap gap-1.5">
-          <Chip active={!typeFilter} onClick={() => setTypeFilter(null)} label={t('sidebar.all', { n: total })} />
-          {types.map(([ty, n]) => (
-            <Chip
-              key={ty}
-              active={typeFilter === ty}
-              onClick={() => setTypeFilter(typeFilter === ty ? null : ty)}
-              label={`${typeLabel(ty, t)} ${n}`}
-              dot={styleFor(ty).dot}
-            />
-          ))}
+    <aside className="w-[22rem] shrink-0 border-r border-[#EFE4FB] bg-cream/40 flex flex-col min-h-0">
+      <div className="p-3 space-y-2.5">
+        <div className="relative">
+          <svg
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-purple pointer-events-none z-10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <line x1="21" y1="21" x2="16.5" y2="16.5" />
+          </svg>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('sidebar.search')}
+            className="grad-border grad-border-hover w-full rounded-2xl pl-10 pr-3 py-2.5 text-sm text-ink placeholder:text-muted outline-none focus:shadow-soft"
+          />
         </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Chip active={noFilter} onClick={clearFilters} label={t('sidebar.all', { n: total })} />
+        </div>
+
+        {/* L1 — by product */}
+        {products.length > 0 && (
+          <ChipRow label={t('sidebar.product')}>
+            {products.map(([p, n]) => (
+              <Chip
+                key={p}
+                active={productFilter === p}
+                onClick={() => setProductFilter(productFilter === p ? null : p)}
+                label={`${labelOr('product', p, t)} ${n}`}
+                dot={productDot(p)}
+              />
+            ))}
+          </ChipRow>
+        )}
+
+        {/* L2 — by coverage scope */}
+        {scopes.length > 0 && (
+          <ChipRow label={t('sidebar.scope')}>
+            {scopes.map(([s, n]) => (
+              <Chip
+                key={s}
+                active={scopeFilter === s}
+                onClick={() => setScopeFilter(scopeFilter === s ? null : s)}
+                label={`${labelOr('scope', s, t)} ${n}`}
+                dot={scopeDot(s)}
+              />
+            ))}
+          </ChipRow>
+        )}
+
+        {/* Type — dropdown multi-select */}
+        {types.length > 0 && (
+          <ChipRow label={t('sidebar.type')}>
+            <MultiSelect
+              placeholder={t('sidebar.typeAll')}
+              options={types}
+              selected={typeFilter}
+              onToggle={(id) =>
+                setTypeFilters(typeFilter.includes(id)
+                  ? typeFilter.filter((x) => x !== id)
+                  : [...typeFilter, id])
+              }
+              onClear={() => setTypeFilters([])}
+              clearLabel={t('filter.clear')}
+              labelForId={(id) => typeLabel(id, t)}
+              dotForId={(id) => styleFor(id).dot}
+            />
+          </ChipRow>
+        )}
       </div>
-      <div className="flex-1 overflow-y-auto">
-        {error && <div className="p-4 text-sm text-rose-400">{t('detail.error', { msg: error })}</div>}
+      <div className="flex-1 overflow-y-auto px-2.5 py-2">
+        {error && <div className="p-4 text-sm text-coral">{t('detail.error', { msg: error })}</div>}
         {loading && memories.length === 0 && !error && (
-          <div className="p-6 text-sm text-slate-500 text-center">{t('sidebar.scanning')}</div>
+          <div className="p-6 text-sm text-muted text-center">{t('sidebar.scanning')}</div>
         )}
         {!error && !loading && memories.length === 0 && (
-          <div className="p-6 text-sm text-slate-500 text-center">
+          <div className="p-6 text-sm text-muted text-center">
             {t('sidebar.empty')}
           </div>
         )}
@@ -177,17 +278,89 @@ function Sidebar({ memories, total, query, setQuery, typeFilter, setTypeFilter, 
   );
 }
 
+function ChipRow({ label, children }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[10px] uppercase tracking-wide text-purple/70 font-display w-9 shrink-0">{label}</span>
+      {children}
+    </div>
+  );
+}
+
 function Chip({ active, onClick, label, dot }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full border transition-colors ${
-        active ? 'border-sky-500/60 bg-sky-500/10 text-sky-200' : 'border-edge text-slate-400 hover:border-slate-600'
+      className={`btn flex items-center gap-1.5 text-[11px] px-2.5 py-1 !rounded-full ${
+        active
+          ? 'grad-border-sel text-purpleDeep font-medium'
+          : 'grad-border grad-border-hover text-muted'
       }`}
     >
       {dot && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
       {label}
     </button>
+  );
+}
+
+// Dropdown multi-select used for the Type filter. `selected` is an array of ids.
+function MultiSelect({ placeholder, options, selected, onToggle, onClear, clearLabel, labelForId, dotForId }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const count = selected.length;
+  const summary = count === 0
+    ? placeholder
+    : count === 1
+      ? labelForId(selected[0])
+      : `${labelForId(selected[0])} +${count - 1}`;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className={`btn flex items-center gap-1.5 text-[11px] px-2.5 py-1 !rounded-full ${
+          count > 0 ? 'grad-border-sel text-purpleDeep font-medium' : 'grad-border grad-border-hover text-muted'
+        }`}
+      >
+        {summary}
+        <svg className={`w-2.5 h-2.5 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M2.5 4.5 6 8l3.5-3.5" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1.5 left-0 min-w-[11rem] grad-border rounded-2xl bg-white shadow-soft p-1.5 fade-in">
+          {options.map(([id, n]) => {
+            const on = selected.includes(id);
+            return (
+              <button
+                key={id}
+                onClick={() => onToggle(id)}
+                className={`w-full flex items-center gap-2 text-left text-xs px-2 py-1.5 rounded-xl hover:bg-cream/70 ${on ? 'text-purpleDeep font-medium' : 'text-ink'}`}
+              >
+                <span className={`w-3.5 h-3.5 shrink-0 grid place-items-center rounded-[5px] border ${on ? 'bg-gradient-to-br from-sky to-purple border-transparent text-white' : 'border-[#D9CCEC]'}`}>
+                  {on && <span className="text-[9px] leading-none">✓</span>}
+                </span>
+                <span className={`w-1.5 h-1.5 rounded-full ${dotForId(id)}`} />
+                <span className="flex-1 truncate">{labelForId(id)}</span>
+                <span className="text-[10px] text-muted tabular-nums">{n}</span>
+              </button>
+            );
+          })}
+          {count > 0 && (
+            <button onClick={onClear} className="w-full text-center text-[11px] text-muted hover:text-purpleDeep mt-1 pt-1.5 border-t border-[#EFE4FB]">
+              {clearLabel}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -197,38 +370,62 @@ function MemoryRow({ m, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-3 py-2.5 border-b border-edge/60 fade-up transition-colors ${
-        active ? 'bg-sky-500/10' : 'hover:bg-edge/40'
+      className={`card pop relative w-full text-left px-3 py-2.5 rounded-2xl mb-2 ${
+        active ? 'grad-border-sel' : 'grad-border grad-border-hover'
       }`}
     >
+      {/* Selected check badge. */}
+      {active && (
+        <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-gradient-to-br from-sky to-purple text-white text-[11px] grid place-items-center shadow-soft border-2 border-white">
+          ✓
+        </span>
+      )}
       <div className="flex items-center gap-2">
-        <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-        <span className="font-medium text-sm text-slate-100 truncate">{m.name}</span>
-        {m.isIndex && <span className="text-[9px] px-1 rounded bg-edge text-slate-400">{t('row.index')}</span>}
+        <span className={`w-2 h-2 rounded-full ${s.dot}`} />
+        <span className="font-medium text-sm truncate text-ink">{m.name}</span>
+        {m.isIndex && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-sun/30 text-[#a06a12]">{t('row.index')}</span>}
         <span className="flex-1" />
         {m.links.length > 0 && (
-          <span className="text-[10px] text-slate-500">🔗 {m.links.length}</span>
+          <span className="text-[10px] text-purple">🔗 {m.links.length}</span>
         )}
       </div>
       {m.description && (
-        <div className="text-xs text-slate-500 mt-0.5 line-clamp-2 pl-3.5">{m.description}</div>
+        <div className="text-xs mt-0.5 line-clamp-2 pl-4 text-muted">{m.description}</div>
       )}
-      <div className="text-[10px] text-slate-600 mt-1 pl-3.5 truncate">{m.kindLabel}</div>
+      <div className="flex flex-wrap items-center gap-1 mt-1.5 pl-4">
+        <RowTag dot={productDot(m.product)}>{labelOr('product', m.product, t)}</RowTag>
+        <RowTag dot={scopeDot(m.scope)}>{labelOr('scope', m.scope, t)}</RowTag>
+        <RowTag dot={styleFor(m.type).dot}>{typeLabel(m.type, t)}</RowTag>
+      </div>
+      <div className="text-[10px] mt-1 pl-4 truncate text-muted/80">{m.kindLabel}</div>
     </button>
   );
 }
 
-function Detail({ id, onSaved }) {
+// Compact label pill shown on each memory row (product / scope / type).
+function RowTag({ dot, children }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full grad-border text-muted whitespace-nowrap">
+      <span className={`w-1 h-1 rounded-full ${dot}`} />
+      {children}
+    </span>
+  );
+}
+
+function Detail({ id, onSaved, onDeleted }) {
   const { t } = useI18n();
   const [mem, setMem] = useState(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     setEditing(false);
     setSavedMsg(null);
+    setConfirmDel(false);
     if (!id) { setMem(null); return; }
     fetch(`${API}/api/memory?id=${encodeURIComponent(id)}`)
       .then((r) => r.json())
@@ -237,7 +434,7 @@ function Detail({ id, onSaved }) {
   }, [id]);
 
   if (!id) return <Empty />;
-  if (!mem) return <div className="flex-1 grid place-items-center text-slate-500">{t('detail.loading')}</div>;
+  if (!mem) return <div className="flex-1 grid place-items-center text-muted">{t('detail.loading')}</div>;
 
   const save = async () => {
     setSaving(true);
@@ -261,30 +458,62 @@ function Detail({ id, onSaved }) {
     }
   };
 
+  const del = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`${API}/api/memory?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }).then((r) => r.json());
+      if (res.ok) {
+        onDeleted?.();
+      } else {
+        setConfirmDel(false);
+        setSavedMsg(t('detail.error', { msg: res.error }));
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <main className="flex-1 flex flex-col min-h-0">
-      <div className="flex items-center gap-3 px-5 h-12 border-b border-edge">
-        <span className={`w-2 h-2 rounded-full ${styleFor(mem.meta?.metadata?.type || mem.meta?.type).dot}`} />
-        <h2 className="font-semibold truncate">{mem.meta?.name || mem.relPath}</h2>
+      <div className="flex items-center gap-3 px-5 h-14 divider-grad bg-white/70 backdrop-blur-sm">
+        <span className={`w-2.5 h-2.5 rounded-full ${styleFor(mem.meta?.metadata?.type || mem.meta?.type).dot}`} />
+        <h2 className="font-display text-ink truncate">{mem.meta?.name || mem.relPath}</h2>
         <span className="flex-1" />
-        {savedMsg && <span className="text-xs text-emerald-400">{savedMsg}</span>}
-        {!editing ? (
-          <button onClick={() => setEditing(true)} className="text-xs px-3 py-1.5 rounded-md border border-edge hover:bg-edge">
-            {t('detail.edit')}
-          </button>
-        ) : (
+        {savedMsg && <span className="toast text-xs px-2.5 py-1 rounded-full bg-mint/30 text-[#2f9c84] font-medium">{savedMsg}</span>}
+        {confirmDel ? (
           <>
-            <button onClick={() => { setEditing(false); setDraft(mem.raw); }} className="text-xs px-3 py-1.5 rounded-md border border-edge hover:bg-edge">
+            <span className="text-xs text-coral font-medium">{t('detail.confirmDelete')}</span>
+            <button onClick={del} disabled={deleting} className="btn text-xs px-3 py-1.5 !bg-coral text-white font-medium">
+              {deleting ? t('detail.deleting') : t('detail.confirmYes')}
+            </button>
+            <button onClick={() => setConfirmDel(false)} disabled={deleting} className="btn btn-ghost text-xs px-3 py-1.5">
               {t('detail.cancel')}
             </button>
-            <button onClick={save} disabled={saving} className="text-xs px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-50">
+          </>
+        ) : !editing ? (
+          <>
+            <button onClick={() => setEditing(true)} className="btn btn-ghost text-xs px-3 py-1.5">
+              {t('detail.edit')}
+            </button>
+            <button onClick={() => { setSavedMsg(null); setConfirmDel(true); }} className="btn btn-ghost text-xs px-3 py-1.5 text-coral">
+              {t('detail.delete')}
+            </button>
+          </>
+        ) : (
+          <>
+            <button onClick={() => { setEditing(false); setDraft(mem.raw); }} className="btn btn-ghost text-xs px-3 py-1.5">
+              {t('detail.cancel')}
+            </button>
+            <button onClick={save} disabled={saving} className="btn btn-blue text-xs px-3 py-1.5">
               {saving ? t('detail.saving') : t('detail.save')}
             </button>
           </>
         )}
       </div>
 
-      <div className="px-5 py-2 border-b border-edge/60 text-[11px] text-slate-500 font-mono truncate">
+      <div className="px-5 py-2 text-[11px] text-muted font-mono truncate">
         {mem.relPath}
       </div>
 
@@ -294,7 +523,7 @@ function Detail({ id, onSaved }) {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             spellCheck={false}
-            className="w-full h-full min-h-[60vh] bg-ink border border-edge rounded-lg p-4 font-mono text-sm leading-relaxed outline-none focus:border-sky-500/60 resize-none"
+            className="grad-border w-full h-full min-h-[60vh] rounded-2xl p-4 font-mono text-sm leading-relaxed text-ink outline-none focus:shadow-soft resize-none"
           />
         ) : (
           <Rendered mem={mem} />
@@ -308,26 +537,26 @@ function Rendered({ mem }) {
   const { t } = useI18n();
   const meta = mem.meta || {};
   return (
-    <div className="max-w-3xl fade-up">
+    <div className="max-w-3xl fade-in">
       {Object.keys(meta).length > 0 && (
-        <div className="mb-5 rounded-lg border border-edge bg-panel/60 p-4 text-sm">
-          <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-2">{t('detail.frontmatter')}</div>
-          <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1.5">
+        <div className="grad-border mb-5 rounded-2xl p-4 text-sm shadow-soft">
+          <div className="text-[10px] uppercase tracking-wide text-purple mb-2 font-display">{t('detail.frontmatter')}</div>
+          <dl className="grid grid-cols-[minmax(7rem,max-content)_1fr] gap-x-3 gap-y-1.5">
             {flattenMeta(meta).map(([k, v]) => (
               <FrontmatterRow key={k} k={k} v={v} />
             ))}
           </dl>
         </div>
       )}
-      <article className="prose-invert text-[15px] leading-7 text-slate-200 whitespace-pre-wrap">
+      <article className="text-[15px] leading-7 text-ink whitespace-pre-wrap">
         {linkify(mem.body)}
       </article>
       {mem.links.length > 0 && (
-        <div className="mt-6 pt-4 border-t border-edge">
-          <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-2">{t('detail.linksTo')}</div>
+        <div className="mt-6 pt-4 border-t-2 border-[#EFE4FB]">
+          <div className="text-[10px] uppercase tracking-wide text-purple mb-2 font-display">{t('detail.linksTo')}</div>
           <div className="flex flex-wrap gap-2">
             {mem.links.map((l) => (
-              <span key={l} className="text-xs px-2 py-1 rounded-md bg-edge text-sky-300">[[{l}]]</span>
+              <span key={l} className="grad-border text-xs px-2.5 py-1 rounded-full text-purpleDeep">[[{l}]]</span>
             ))}
           </div>
         </div>
@@ -339,8 +568,8 @@ function Rendered({ mem }) {
 function FrontmatterRow({ k, v }) {
   return (
     <>
-      <dt className="text-slate-500 font-mono text-xs pt-0.5">{k}</dt>
-      <dd className="text-slate-200">{v}</dd>
+      <dt className="text-muted font-mono text-xs pt-0.5 break-all">{k}</dt>
+      <dd className="text-ink">{v}</dd>
     </>
   );
 }
@@ -359,7 +588,7 @@ function linkify(text) {
   const parts = String(text).split(/(\[\[[^\]]+\]\])/g);
   return parts.map((p, i) =>
     /^\[\[[^\]]+\]\]$/.test(p)
-      ? <span key={i} className="text-sky-400 font-medium">{p}</span>
+      ? <span key={i} className="text-purpleDeep font-medium">{p}</span>
       : <span key={i}>{p}</span>
   );
 }
@@ -368,10 +597,10 @@ function Empty() {
   const { t } = useI18n();
   return (
     <main className="flex-1 grid place-items-center text-center px-8">
-      <div className="max-w-md fade-up">
-        <div className="text-5xl mb-4">🧠</div>
-        <h2 className="text-lg font-semibold text-slate-200">{t('empty.title')}</h2>
-        <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+      <div className="max-w-md pop">
+        <div className="text-7xl mb-4">🧠</div>
+        <h2 className="font-display text-xl text-ink">{t('empty.title')}</h2>
+        <p className="text-sm text-muted mt-2 leading-relaxed">
           {t('empty.body')}
         </p>
       </div>

@@ -6,7 +6,7 @@
  * network calls, and reads/writes only files you already have. No telemetry.
  */
 import { createServer } from 'node:http';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, extname } from 'node:path';
@@ -84,6 +84,22 @@ const routes = {
     }
   },
 
+  // Delete a memory — backs up to a .bak first, so it stays reversible.
+  'DELETE /api/memory': async (req, res, url) => {
+    const id = url.searchParams.get('id');
+    if (!id) return json(res, 400, { error: 'missing id' });
+    const path = pathFor(id);
+    if (!existsSync(path)) return json(res, 404, { error: 'file not found' });
+    try {
+      const prev = await readFile(path, 'utf8');
+      await writeFile(`${path}.bak`, prev, 'utf8'); // reversible by design
+      await rm(path);
+      json(res, 200, { ok: true, backup: `${path}.bak` });
+    } catch (e) {
+      json(res, 500, { error: String(e.message || e) });
+    }
+  },
+
   // Link graph: nodes = memories, edges = [[wikilinks]] between them.
   'GET /api/graph': async (_req, res) => {
     const memories = await scanMemories();
@@ -105,13 +121,17 @@ const routes = {
 function summarize(memories) {
   const byType = {};
   const byKind = {};
+  const byProduct = {}; // L1 — by product
+  const byScope = {};   // L2 — by coverage scope
   let linked = 0;
   for (const m of memories) {
     byType[m.type] = (byType[m.type] || 0) + 1;
     byKind[m.kind] = (byKind[m.kind] || 0) + 1;
+    byProduct[m.product] = (byProduct[m.product] || 0) + 1;
+    byScope[m.scope] = (byScope[m.scope] || 0) + 1;
     if (m.links.length) linked++;
   }
-  return { total: memories.length, byType, byKind, linked };
+  return { total: memories.length, byType, byKind, byProduct, byScope, linked };
 }
 
 async function serveStatic(req, res, url) {

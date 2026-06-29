@@ -45,6 +45,35 @@ const KINDS = [
   },
 ];
 
+// L1 classification — the product/agent a memory belongs to, keyed by source kind.
+const PRODUCT_BY_KIND = {
+  'claude-memory': 'claude-code',
+  'claude-md': 'claude-code',
+  'agents-md': 'codex',
+  'cursor-rules': 'cursor',
+};
+
+/** L1: which product/agent this memory belongs to. */
+function productFor(kind) {
+  return PRODUCT_BY_KIND[kind] || 'other';
+}
+
+/**
+ * L2: how broadly the memory applies — 'project', 'user', or 'global'.
+ * Explicit frontmatter scope/type wins; otherwise we infer from the path:
+ * per-project trees → project, anything under $HOME → user, else global.
+ */
+function scopeFor(path, meta, kind) {
+  const declared = meta.metadata?.scope || meta.scope || meta.metadata?.type || meta.type;
+  if (declared === 'project' || declared === 'user') return declared;
+  if (kind === 'claude-memory') {
+    return path.includes(`${sep}projects${sep}`) ? 'project' : 'user';
+  }
+  if (path.startsWith(process.cwd())) return 'project';
+  if (path.startsWith(homedir())) return 'user';
+  return 'global';
+}
+
 // Directories we never descend into — keeps scans fast and avoids noise.
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', '.next', '.cache',
@@ -168,6 +197,8 @@ export async function scanMemories() {
           name: meta.name || basename(path).replace(/\.(md|mdc)$/, ''),
           description: meta.description || preview.split('\n')[0] || '',
           type: meta.metadata?.type || meta.type || kind.id,
+          product: productFor(kind.id),          // L1 — by product
+          scope: scopeFor(path, meta, kind.id),  // L2 — by coverage scope
           links,
           size: st.size,
           mtime: st.mtimeMs,
