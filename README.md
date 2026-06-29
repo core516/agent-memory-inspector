@@ -37,8 +37,8 @@ Agent Memory Inspector answers all three. It doesn't add another memory backend 
 ## What it does
 
 - 🔍 **Discovers** memory across every agent convention on your machine — no config, no migration.
-- 🗂️ **Browse & search** every fact, filtered by type (`user` · `feedback` · `project` · `reference`).
-- ✏️ **Edit & prune** in place — fix a stale fact or delete a wrong one. Every save writes a `.bak` first, so it's reversible.
+- 🗂️ **Browse & search** every fact, with three-axis filtering — by **product** (Claude Code · Codex · Cursor), by **scope** (project · user · global), and by **type** (`user` · `feedback` · `project` · `reference`).
+- ✏️ **Edit & delete** in place — fix a stale fact, or remove a wrong one with a confirm step. Every edit *and* delete writes a `.bak` first, so it's always reversible.
 - 🔗 **Follow the links** — see how memories cross-reference each other via `[[wikilinks]]`.
 - 🔒 **Stays on your machine** — binds to `127.0.0.1`, makes zero outbound calls, ships zero telemetry.
 
@@ -56,14 +56,16 @@ That's it. No account, no install, no cloud.
 
 ## What it reads
 
-| Source | Location |
-| --- | --- |
-| Claude Code memory | `~/.claude/projects/<project>/memory/*.md` + `MEMORY.md` |
-| Project brief | `CLAUDE.md` (cwd and home) |
-| AGENTS.md | `AGENTS.md` in your project |
-| Cursor rules | `.cursor/rules/*.mdc` |
+| Source | Product | Location |
+| --- | --- | --- |
+| Claude Code memory | Claude Code | `~/.claude/projects/<project>/memory/*.md` + `MEMORY.md` |
+| Project brief | Claude Code | `CLAUDE.md` (cwd and home) |
+| AGENTS.md | Codex | `AGENTS.md` in your project |
+| Cursor rules | Cursor | `.cursor/rules/*.mdc` |
 
-Reading only. Edits go back to the **original file** with a `.bak` safety copy. Nothing leaves your disk.
+Every memory is tagged by **product** (which agent wrote it) and **scope** (project · user · global), so you can slice your memory whichever way you think about it.
+
+Reading only. Edits and deletes go back to the **original file** with a `.bak` safety copy. Nothing leaves your disk.
 
 ## Why local-first
 

@@ -37,8 +37,8 @@ Agent Memory Inspector 一次性回答这三个问题。它不会再塞给你一
 ## 功能
 
 - 🔍 **自动发现**——扫描你机器上所有主流助手约定的记忆位置，无需配置、无需迁移。
-- 🗂️ **浏览与搜索**——按类型（`user` · `feedback` · `project` · `reference`）筛选每一条事实。
-- ✏️ **就地编辑与清理**——修正过时的事实或删除错误的内容。每次保存都会先写入一份 `.bak`，操作可回退。
+- 🗂️ **浏览与搜索**——支持三个维度筛选：按**产品**（Claude Code · Codex · Cursor）、按**范围**（项目 · 用户 · 全局）、以及按**类型**（`user` · `feedback` · `project` · `reference`）。
+- ✏️ **就地编辑与删除**——修正过时的事实，或经二次确认后删除错误的内容。每次编辑*和*删除都会先写入一份 `.bak`，操作始终可回退。
 - 🔗 **顺着链接看**——通过 `[[wikilinks]]` 查看记忆之间是如何互相引用的。
 - 🔒 **数据不出本机**——绑定到 `127.0.0.1`，零对外请求，零遥测。
 
@@ -56,14 +56,16 @@ PORT=4000 npx agent-memory-inspector
 
 ## 它会读取哪些内容
 
-| 来源 | 位置 |
-| --- | --- |
-| Claude Code 记忆 | `~/.claude/projects/<project>/memory/*.md` + `MEMORY.md` |
-| 项目说明 | `CLAUDE.md`（当前目录与主目录） |
-| AGENTS.md | 项目中的 `AGENTS.md` |
-| Cursor 规则 | `.cursor/rules/*.mdc` |
+| 来源 | 产品 | 位置 |
+| --- | --- | --- |
+| Claude Code 记忆 | Claude Code | `~/.claude/projects/<project>/memory/*.md` + `MEMORY.md` |
+| 项目说明 | Claude Code | `CLAUDE.md`（当前目录与主目录） |
+| AGENTS.md | Codex | 项目中的 `AGENTS.md` |
+| Cursor 规则 | Cursor | `.cursor/rules/*.mdc` |
 
-仅做读取。编辑会写回**原始文件**，并保留一份 `.bak` 安全副本。任何数据都不会离开你的磁盘。
+每条记忆都会标注所属**产品**（由哪个助手写入）与**范围**（项目 · 用户 · 全局），你可以按自己习惯的任意维度来切分记忆。
+
+仅做读取。编辑与删除都会写回**原始文件**，并保留一份 `.bak` 安全副本。任何数据都不会离开你的磁盘。
 
 ## 为什么坚持本地优先
 
