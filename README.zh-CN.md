@@ -8,6 +8,12 @@
 
 **本地优先 · 零迁移 · 无遥测 · 一条命令搞定。**
 
+[![npm version](https://img.shields.io/npm/v/agent-memory-inspector?color=cb3837&logo=npm)](https://www.npmjs.com/package/agent-memory-inspector)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.5-339933?logo=node.js&logoColor=white)](package.json)
+[![Zero runtime deps](https://img.shields.io/badge/runtime%20deps-0-blue)](package.json)
+[![Star this repo](https://img.shields.io/github/stars/core516/agent-memory-inspector?style=social)](https://github.com/core516/agent-memory-inspector)
+
 ```bash
 npx agent-memory-inspector
 ```
@@ -74,7 +80,7 @@ PORT=4000 npx agent-memory-inspector
 ## 开发
 
 ```bash
-git clone https://github.com/<org>/agent-memory-inspector
+git clone https://github.com/core516/agent-memory-inspector
 cd agent-memory-inspector
 npm run build          # 将 Web UI 构建到 web/dist
 npm start              # 在 http://127.0.0.1:4317 提供 UI + API 服务
@@ -94,6 +100,10 @@ npm run dev:web        # 终端 2 —— 运行在 :5173 的 Vite 开发服务�
 - 🔌 更多来源：Windsurf、Cline、Continue、自定义路径。
 
 欢迎贡献——请先开一个 issue，方便我们一起把方向打磨清楚。
+
+## ⭐ 觉得好用？
+
+如果它帮你揪出了助手身上过时或错误的记忆，点个 **star** 能让更多开发者发现它——这是对作者最省事的一句"继续加油"。
 
 ## 许可证
 

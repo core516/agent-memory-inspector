@@ -8,6 +8,13 @@
 
 **Local-first. Zero migration. No telemetry. One command.**
 
+[![npm version](https://img.shields.io/npm/v/agent-memory-inspector?color=cb3837&logo=npm)](https://www.npmjs.com/package/agent-memory-inspector)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.5-339933?logo=node.js&logoColor=white)](package.json)
+[![Zero runtime deps](https://img.shields.io/badge/runtime%20deps-0-blue)](package.json)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/core516/agent-memory-inspector/issues)
+[![Star this repo](https://img.shields.io/github/stars/core516/agent-memory-inspector?style=social)](https://github.com/core516/agent-memory-inspector)
+
 ```bash
 npx agent-memory-inspector
 ```
@@ -74,7 +81,7 @@ Your agent's memory is among the most personal data on your machine — it's a p
 ## Development
 
 ```bash
-git clone https://github.com/<org>/agent-memory-inspector
+git clone https://github.com/core516/agent-memory-inspector
 cd agent-memory-inspector
 npm run build          # builds the web UI into web/dist
 npm start              # serves UI + API on http://127.0.0.1:4317
@@ -94,6 +101,10 @@ Stack: zero-dependency Node server (built-ins only) + React + Vite + Tailwind. T
 - 🔌 More sources: Windsurf, Cline, Continue, custom paths.
 
 Contributions welcome — open an issue first so we can shape it together.
+
+## ⭐ Like it?
+
+If this helped you find a stale or wrong memory your agent was carrying, a **star** helps other developers discover it too. It's the one-click way to say "keep going."
 
 ## License
 
