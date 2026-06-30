@@ -116,19 +116,40 @@ export default function App() {
   const [scopeFilter, setScopeFilter] = useState(null);     // L2
   const [selectedId, setSelectedId] = useState(null);
 
+  const matchQuery = (m, q) =>
+    !q ||
+    m.name.toLowerCase().includes(q) ||
+    m.description.toLowerCase().includes(q) ||
+    m.path.toLowerCase().includes(q);
+  const passType = (m) => !typeFilters.length || typeFilters.includes(m.type);
+  const passProduct = (m) => !productFilter || m.product === productFilter;
+  const passScope = (m) => !scopeFilter || m.scope === scopeFilter;
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return memories.filter((m) => {
-      if (typeFilters.length && !typeFilters.includes(m.type)) return false;
-      if (productFilter && m.product !== productFilter) return false;
-      if (scopeFilter && m.scope !== scopeFilter) return false;
-      if (!q) return true;
-      return (
-        m.name.toLowerCase().includes(q) ||
-        m.description.toLowerCase().includes(q) ||
-        m.path.toLowerCase().includes(q)
-      );
-    });
+    return memories.filter((m) => passType(m) && passProduct(m) && passScope(m) && matchQuery(m, q));
+  }, [memories, query, typeFilters, productFilter, scopeFilter]);
+
+  // Cascading facet options. Each facet counts the memories passing the OTHER
+  // active filters (plus search) — so choosing a 范围 narrows what 类型 offers,
+  // and vice-versa. A facet never filters itself, keeping its options visible
+  // for multi-select; the currently-selected ids are always kept (even at 0)
+  // so they can be toggled back off. Options that fall to 0 are hidden.
+  const facets = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const tally = (predicate, key, keepIds) => {
+      const counts = {};
+      for (const id of keepIds) counts[id] = 0;
+      for (const m of memories) {
+        if (matchQuery(m, q) && predicate(m)) counts[m[key]] = (counts[m[key]] || 0) + 1;
+      }
+      return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    };
+    return {
+      products: tally((m) => passScope(m) && passType(m), 'product', productFilter ? [productFilter] : []),
+      scopes:   tally((m) => passProduct(m) && passType(m), 'scope', scopeFilter ? [scopeFilter] : []),
+      types:    tally((m) => passProduct(m) && passScope(m), 'type', typeFilters),
+    };
   }, [memories, query, typeFilters, productFilter, scopeFilter]);
 
   const clearFilters = () => { setTypeFilters([]); setProductFilter(null); setScopeFilter(null); };
@@ -149,7 +170,7 @@ export default function App() {
           scopeFilter={scopeFilter}
           setScopeFilter={setScopeFilter}
           clearFilters={clearFilters}
-          stats={stats}
+          facets={facets}
           selectedId={selectedId}
           onSelect={setSelectedId}
           loading={loading}
@@ -219,12 +240,11 @@ function Stat({ n, label }) {
   );
 }
 
-function Sidebar({ memories, total, query, setQuery, typeFilter, setTypeFilters, productFilter, setProductFilter, scopeFilter, setScopeFilter, clearFilters, stats, selectedId, onSelect, loading, scanning, error, lastScan, onRescan }) {
+function Sidebar({ memories, total, query, setQuery, typeFilter, setTypeFilters, productFilter, setProductFilter, scopeFilter, setScopeFilter, clearFilters, facets, selectedId, onSelect, loading, scanning, error, lastScan, onRescan }) {
   const { t } = useI18n();
-  const sorted = (obj) => Object.entries(obj || {}).sort((a, b) => b[1] - a[1]);
-  const types = stats ? sorted(stats.byType) : [];
-  const products = stats ? sorted(stats.byProduct) : [];
-  const scopes = stats ? sorted(stats.byScope) : [];
+  const types = facets.types;
+  const products = facets.products;
+  const scopes = facets.scopes;
   const noFilter = typeFilter.length === 0 && !productFilter && !scopeFilter;
   return (
     <aside className="w-[22rem] shrink-0 border-r border-[#EFE4FB] bg-cream/40 flex flex-col min-h-0">
