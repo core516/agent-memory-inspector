@@ -13,6 +13,32 @@ const TYPE_STYLE = {
 const FALLBACK_STYLE = { dot: 'bg-[#C9BFD8]', text: 'text-muted' };
 const styleFor = (t) => TYPE_STYLE[t] || FALLBACK_STYLE;
 
+// Flat candy-pink brain mascot. Inline SVG (not the 🧠 emoji) so there's no
+// baked-in black glyph outline — the only frame is the gradient ring around it.
+function Brain({ className = '' }) {
+  return (
+    <svg viewBox="0 0 64 64" className={className} role="img" aria-label="brain">
+      <defs>
+        <linearGradient id="brainGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#FFC2D4" />
+          <stop offset="100%" stopColor="#FF8FB0" />
+        </linearGradient>
+      </defs>
+      <path
+        fill="url(#brainGrad)"
+        d="M32 9 C35 4 41 4 45 9 C49 8 54 11 54 17 C57 21 58 26 56 30 C55 35 54 38 50 40 C47 43 44 45 40 44 C37 44 35 44 32 43 C29 44 27 44 24 44 C20 45 17 43 14 40 C10 38 9 35 8 30 C6 26 7 21 10 17 C10 11 15 8 19 9 C23 4 29 4 32 9 Z"
+      />
+      <g fill="none" stroke="#E8729E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.6">
+        <path d="M32 12 C35 18 29 24 32 30 C35 36 30 39 32 42" />
+        <path d="M38 17 C44 19 44 24 39 26" />
+        <path d="M42 31 C47 32 47 36 42 37" />
+        <path d="M26 17 C20 19 20 24 25 26" />
+        <path d="M22 31 C17 32 17 36 22 37" />
+      </g>
+    </svg>
+  );
+}
+
 // L1 — color per product. L2 — color per coverage scope.
 const PRODUCT_STYLE = {
   'claude-code': { dot: 'bg-purple' },
@@ -148,7 +174,7 @@ function Header({ stats, onRescan, scanning }) {
         <span className="w-3 h-3 rounded-full bg-sun" />
         <span className="w-3 h-3 rounded-full bg-mint" />
       </div>
-      <span className="text-2xl ml-1">🧠</span>
+      <span className="brain-badge w-10 h-10 ml-1"><Brain className="w-6 h-6" /></span>
       <div className="leading-tight">
         <div className="font-display text-lg text-ink">{t('app.title')}</div>
         <div className="text-[11px] text-muted -mt-0.5">
@@ -654,7 +680,7 @@ function Empty() {
   return (
     <main className="flex-1 grid place-items-center text-center px-8 bg-cream">
       <div className="max-w-md pop">
-        <div className="text-7xl mb-4">🧠</div>
+        <div className="brain-badge w-24 h-24 mx-auto mb-4"><Brain className="w-16 h-16" /></div>
         <h2 className="font-display text-xl text-ink">{t('empty.title')}</h2>
         <p className="text-sm text-muted mt-2 leading-relaxed">
           {t('empty.body')}

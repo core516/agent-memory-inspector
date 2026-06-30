@@ -56,6 +56,19 @@ body {
     box-shadow: 0 10px 22px rgba(58,45,74,.14);
   }
 
+  /* Brain mascot framed in a rainbow gradient ring (echoes divider-grad). */
+  .brain-badge {
+    display: inline-grid;
+    place-items: center;
+    line-height: 1;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background:
+      linear-gradient(#fff, #fff) padding-box,
+      linear-gradient(135deg, #9B7EDE, #6FC3FF, #6FE0C8, #FFD45E) border-box;
+    box-shadow: 0 6px 16px rgba(58,45,74,.10);
+  }
+
   /* Straight gradient divider (top bar / panel edges). */
   .divider-grad {
     border-bottom: 3px solid transparent;
