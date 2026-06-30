@@ -133,3 +133,11 @@ body {
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 .toast { animation: toast-in .3s cubic-bezier(.34,1.56,.64,1) both; }
+
+/* Blinking block cursor for the live-scan terminal window. */
+@keyframes term-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.term-cursor { animation: term-blink 1s step-end infinite; }
+
+/* Dark, subtle scrollbar inside the terminal body (overrides the lilac one). */
+.term-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); }
+.term-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.30); }

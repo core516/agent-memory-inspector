@@ -65,6 +65,28 @@ const routes = {
     json(res, 200, { memories, stats, lastScan });
   },
 
+  // Same rescan as above, but streamed over Server-Sent Events so the UI can
+  // show each path + content preview live as the disk walk progresses. Emits
+  // `progress` per memory, then a final `done` with the full list + stats.
+  'GET /api/scan/stream': async (_req, res) => {
+    res.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-store',
+      connection: 'keep-alive',
+    });
+    const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    try {
+      const memories = await scanMemories((p) => send('progress', p));
+      const lastScan = await saveScan(memories);
+      const stats = summarize(memories);
+      send('done', { memories, stats, lastScan });
+    } catch (e) {
+      send('fail', { error: String(e?.message || e) });
+    } finally {
+      res.end();
+    }
+  },
+
   // Full content of one memory (frontmatter + body + raw).
   'GET /api/memory': async (req, res, url) => {
     const id = url.searchParams.get('id');

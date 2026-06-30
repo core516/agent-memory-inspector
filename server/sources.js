@@ -206,8 +206,11 @@ export async function recordForPath(path, kind = kindForPath(path)) {
 /**
  * Scan all known sources and return a flat list of memory records.
  * Each record is light — body is loaded lazily by the detail endpoint.
+ *
+ * `onProgress` (optional) fires once per discovered memory as it's parsed,
+ * letting a streaming caller surface the live path + content preview.
  */
-export async function scanMemories() {
+export async function scanMemories(onProgress) {
   const records = [];
   const seen = new Set();
 
@@ -219,7 +222,17 @@ export async function scanMemories() {
         if (!kind.match(path) || seen.has(path)) continue;
         seen.add(path);
         const record = await recordForPath(path, kind);
-        if (record) records.push(record);
+        if (record) {
+          records.push(record);
+          onProgress?.({
+            path: record.path,
+            rel: safeRel(record.path),
+            name: record.name,
+            description: record.description,
+            kindLabel: record.kindLabel,
+            count: records.length,
+          });
+        }
       }
     }
   }

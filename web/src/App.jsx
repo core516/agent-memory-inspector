@@ -67,6 +67,7 @@ function useMemories() {
   const [data, setData] = useState({ memories: [], stats: null, lastScan: null });
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+  const [progress, setProgress] = useState(null); // live scan: { count, recent: [] }
   const [error, setError] = useState(null);
 
   // Load cached scan results — no filesystem scan happens here, so opening
@@ -90,26 +91,58 @@ function useMemories() {
       });
   };
 
-  // Explicit rescan — the only action that walks the filesystem. Persists to
-  // the cache server-side and returns the fresh list plus the new scan time.
+  // Explicit rescan — the only action that walks the filesystem. Streamed over
+  // SSE so we can surface each path + content preview live; the final `done`
+  // event carries the fresh list, stats, and new scan time (persisted server-side).
   const rescan = () => {
     setScanning(true);
-    fetch(`${API}/api/scan`, { method: 'POST' })
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((d) => { setData(d); setError(null); })
-      .catch((e) => setError(String(e.message || e)))
-      .finally(() => setScanning(false));
+    setProgress({ count: 0, recent: [] });
+    let finished = false;
+    const es = new EventSource(`${API}/api/scan/stream`);
+
+    es.addEventListener('progress', (e) => {
+      const p = JSON.parse(e.data);
+      setProgress((prev) => ({
+        ...prev,
+        count: p.count,
+        recent: [...(prev?.recent || []), p].slice(-300), // chronological log, newest last
+      }));
+    });
+    es.addEventListener('done', (e) => {
+      finished = true;
+      setData(JSON.parse(e.data));
+      setError(null);
+      setScanning(false);
+      setProgress((prev) => ({ ...prev, done: true })); // keep the log; user closes it
+      es.close();
+    });
+    es.addEventListener('fail', (e) => {
+      finished = true;
+      let msg = 'scan failed';
+      try { msg = JSON.parse(e.data).error; } catch { /* keep default */ }
+      setError(msg);
+      setScanning(false);
+      setProgress((prev) => ({ ...prev, done: true, failed: msg }));
+      es.close();
+    });
+    es.onerror = () => {
+      if (finished) return; // normal close after `done`/`fail`
+      setError('scan connection lost');
+      setScanning(false);
+      setProgress((prev) => ({ ...prev, done: true, failed: 'connection lost' }));
+      es.close();
+    };
   };
 
   useEffect(() => load(0), []);
-  return { ...data, loading, scanning, error, reload: () => load(0), rescan };
+  return {
+    ...data, loading, scanning, progress, error,
+    reload: () => load(0), rescan, closeScan: () => setProgress(null),
+  };
 }
 
 export default function App() {
-  const { memories, stats, lastScan, loading, scanning, error, reload, rescan } = useMemories();
+  const { memories, stats, lastScan, loading, scanning, progress, error, reload, rescan, closeScan } = useMemories();
   const [query, setQuery] = useState('');
   const [typeFilters, setTypeFilters] = useState([]); // multi-select
   const [productFilter, setProductFilter] = useState(null); // L1
@@ -181,6 +214,7 @@ export default function App() {
         />
         <Detail id={selectedId} onSaved={reload} onDeleted={() => { setSelectedId(null); reload(); }} />
       </div>
+      <ScanProgress progress={progress} onClose={closeScan} />
     </div>
   );
 }
@@ -189,12 +223,6 @@ function Header({ stats, onRescan, scanning }) {
   const { t, toggle } = useI18n();
   return (
     <header className="flex items-center gap-3 px-5 h-16 divider-grad bg-white/70 backdrop-blur-sm">
-      {/* Playful candy dots in place of window controls. */}
-      <div className="flex items-center gap-2 pr-1">
-        <span className="w-3 h-3 rounded-full bg-coral" />
-        <span className="w-3 h-3 rounded-full bg-sun" />
-        <span className="w-3 h-3 rounded-full bg-mint" />
-      </div>
       <span className="brain-badge w-10 h-10 ml-1"><Brain className="w-6 h-6" /></span>
       <div className="leading-tight">
         <div className="font-display text-lg text-ink">{t('app.title')}</div>
@@ -240,6 +268,77 @@ function Stat({ n, label }) {
   );
 }
 
+// Floating live-scan window styled as a black terminal. Shown while a rescan
+// streams over SSE and stays open after it completes so the full path log
+// remains readable — the user dismisses it with the ✕ button.
+function ScanProgress({ progress, onClose }) {
+  const { t } = useI18n();
+  const logRef = useRef(null);
+  const recent = progress?.recent || [];
+  const done = progress?.done;
+
+  // Keep the newest line in view as lines stream in.
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [recent.length]);
+
+  if (!progress) return null;
+
+  return (
+    <div className="fixed bottom-5 right-5 z-50 w-[30rem] max-w-[calc(100vw-2.5rem)] rounded-xl overflow-hidden shadow-soft border border-black/40 fade-in font-mono">
+      {/* Title bar — title + count on the left, close button on the right. */}
+      <div className="flex items-center gap-2 px-3 h-8 bg-[#2a2a2e] select-none">
+        <span className="text-[11px] text-white/60 truncate">
+          {done ? t('scan.doneTitle') : t('scan.title')}
+        </span>
+        <span className="flex-1" />
+        <span className="text-[11px] text-white/40 tabular-nums">{t('scan.found', { n: progress.count })}</span>
+        <button
+          onClick={onClose}
+          title={t('scan.close')}
+          className="w-5 h-5 grid place-items-center rounded text-white/50 hover:text-white hover:bg-white/10 text-xs leading-none"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Console body — black background, green log lines, auto-scrolled. */}
+      <div ref={logRef} className="term-scroll h-52 overflow-y-auto bg-[#0c0c0c] px-3 py-2 text-[11px] leading-relaxed">
+        {recent.length === 0 ? (
+          <div className="text-emerald-400/70">{t('scan.walking')}<span className="term-cursor">▋</span></div>
+        ) : (
+          <>
+            {recent.map((p, i) => (
+              <div key={`${p.path}-${i}`} className="whitespace-nowrap">
+                <span className="text-emerald-500/60 tabular-nums mr-2">{String(i + 1).padStart(3, '0')}</span>
+                <span className="text-sky-400">scan</span>
+                <span className="text-white/30 mx-1.5">›</span>
+                <span className="text-emerald-300">{p.rel}</span>
+                {p.description && (
+                  <span className="text-white/35"> — {p.description}</span>
+                )}
+              </div>
+            ))}
+            {progress.failed ? (
+              <div className="text-red-400">✕ {progress.failed}</div>
+            ) : done ? (
+              <div className="text-emerald-400">
+                <span className="text-sky-400/70 mr-1">$</span>
+                {t('scan.complete', { n: progress.count })}
+              </div>
+            ) : (
+              <div className="text-emerald-400/80">
+                <span className="text-sky-400/70 mr-1">$</span>
+                <span className="term-cursor">▋</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Sidebar({ memories, total, query, setQuery, typeFilter, setTypeFilters, productFilter, setProductFilter, scopeFilter, setScopeFilter, clearFilters, facets, selectedId, onSelect, loading, scanning, error, lastScan, onRescan }) {
   const { t } = useI18n();
   const types = facets.types;
@@ -273,6 +372,7 @@ function Sidebar({ memories, total, query, setQuery, typeFilter, setTypeFilters,
 
         <div className="flex flex-wrap items-center gap-1.5">
           <Chip active={noFilter} onClick={clearFilters} label={t('sidebar.all', { n: total })} />
+          <LastScanInline lastScan={lastScan} scanning={scanning} />
         </div>
 
         {/* L1 — by product */}
@@ -325,7 +425,6 @@ function Sidebar({ memories, total, query, setQuery, typeFilter, setTypeFilters,
           </ChipRow>
         )}
       </div>
-      <LastScanBar lastScan={lastScan} scanning={scanning} />
       <div className="flex-1 overflow-y-auto px-2.5 py-2">
         {error && <div className="p-4 text-sm text-coral">{t('detail.error', { msg: error })}</div>}
         {(scanning || loading) && memories.length === 0 && !error && (
@@ -364,8 +463,8 @@ function formatScanTime(ms, lang) {
   }
 }
 
-// The "last scan" strip pinned at the top of the memory list.
-function LastScanBar({ lastScan, scanning }) {
+// Compact "last scan" indicator, shown inline to the right of the "All" chip.
+function LastScanInline({ lastScan, scanning }) {
   const { t, lang } = useI18n();
   const text = scanning
     ? t('sidebar.scanning')
@@ -373,10 +472,10 @@ function LastScanBar({ lastScan, scanning }) {
       ? t('sidebar.lastScan', { time: formatScanTime(lastScan, lang) })
       : t('sidebar.neverScannedShort');
   return (
-    <div className="flex items-center gap-1.5 px-3.5 py-2 border-y border-[#EFE4FB] bg-white/50 text-[11px] text-muted">
+    <span className="ml-auto flex items-center gap-1 text-[10px] text-muted whitespace-nowrap">
       <span className={scanning ? 'inline-block animate-spin' : ''}>🕒</span>
       <span className="truncate">{text}</span>
-    </div>
+    </span>
   );
 }
 
